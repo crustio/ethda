@@ -3,6 +3,7 @@ SHELL := /usr/bin/env bash
 pkg := bindings
 monorepo-base := $(shell dirname $(realpath .))
 contracts-dir := $(monorepo-base)/packages/contracts-bedrock
+ETHERSCAN_APIKEY ?=
 
 all: version mkdir bindings
 
@@ -15,16 +16,45 @@ compile:
 		forge clean && \
 		pnpm build
 
-bindings: compile bindings-build
+bindgen: compile bindgen-generate-all
 
-bindings-build:
-	go run ./gen/main.go \
-		-forge-artifacts $(contracts-dir)/forge-artifacts \
-		-out ./bindings \
-		-contracts ./artifacts.json \
-		-source-maps MIPS,PreimageOracle \
-		-package $(pkg) \
-		-monorepo-base $(monorepo-base)
+bindgen-local: compile bindgen-generate-local
+
+bindgen-etherscan: compile bindgen-generate-etherscan
+
+bindgen-generate-all:
+	go run ./bindgen/ \
+		generate \
+		--metadata-out ./$(pkg) \
+		--go-package $(pkg) \
+		--monorepo-base $(monorepo-base) \
+		all \
+		--local-contracts ./artifacts.json \
+		--source-maps-list MIPS,PreimageOracle \
+		--forge-artifacts $(contracts-dir)/forge-artifacts \
+		--etherscan-contracts ./artifacts.json \
+		--etherscan-apikey $(ETHERSCAN_APIKEY)
+
+bindgen-generate-local:
+	go run ./bindgen/ \
+		generate \
+		--metadata-out ./$(pkg) \
+		--go-package $(pkg) \
+		--monorepo-base $(monorepo-base) \
+		local \
+		--local-contracts ./artifacts.json \
+		--source-maps-list MIPS,PreimageOracle \
+		--forge-artifacts $(contracts-dir)/forge-artifacts
+
+bindgen-generate-etherscan:
+	go run ./bindgen/ \
+		generate \
+		--metadata-out ./$(pkg) \
+		--go-package $(pkg) \
+		--monorepo-base $(monorepo-base) \
+		etherscan \
+		--etherscan-contracts ./artifacts.json \
+		--etherscan-apikey $(ETHERSCAN_APIKEY)
 
 mkdir:
 	mkdir -p $(pkg)
