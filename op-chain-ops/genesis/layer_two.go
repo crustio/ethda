@@ -51,27 +51,47 @@ func BuildL2Genesis(config *DeployConfig, l1StartBlock *types.Block) (*core.Gene
 	}
 	for name, predeploy := range predeploys.Predeploys {
 		addr := *predeploy
-		if addr == predeploys.GovernanceTokenAddr && !config.EnableGovernance {
-			// there is no governance token configured, so skip the governance token predeploy
-			log.Warn("Governance is not enabled, skipping governance token predeploy.")
-			continue
-		}
+
 		codeAddr := addr
-		if predeploys.IsProxied(addr) {
-			codeAddr, err = AddressToCodeNamespace(addr)
-			if err != nil {
-				return nil, fmt.Errorf("error converting to code namespace: %w", err)
+		switch name {
+		case "SafeL2":
+			fallthrough
+		case "MultiSendCallOnly":
+			fallthrough
+		case "Multicall3":
+			fallthrough
+		case "Create2Deployer":
+			fallthrough
+		case "SafeSingletonFactory":
+			fallthrough
+		case "DeterministicDeploymentProxy":
+			db.CreateAccount(addr)
+		case "MultiSend":
+			db.CreateAccount(addr)
+			
+		default:
+			if addr == predeploys.GovernanceTokenAddr && !config.EnableGovernance {
+				// there is no governance token configured, so skip the governance token predeploy
+				log.Warn("Governance is not enabled, skipping governance token predeploy.")
+				continue
 			}
-			db.CreateAccount(codeAddr)
-			db.SetState(addr, ImplementationSlot, eth.AddressAsLeftPaddedHash(codeAddr))
-			log.Info("Set proxy", "name", name, "address", addr, "implementation", codeAddr)
-		} else {
-			db.DeleteState(addr, AdminSlot)
+			if predeploys.IsProxied(addr) {
+				codeAddr, err = AddressToCodeNamespace(addr)
+				if err != nil {
+					return nil, fmt.Errorf("error converting to code namespace: %w", err)
+				}
+				db.CreateAccount(codeAddr)
+				db.SetState(addr, ImplementationSlot, eth.AddressAsLeftPaddedHash(codeAddr))
+				log.Info("Set proxy", "name", name, "address", addr, "implementation", codeAddr)
+			} else {
+				db.DeleteState(addr, AdminSlot)
+			}
 		}
+
 		if err := setupPredeploy(db, deployResults, storage, name, addr, codeAddr); err != nil {
 			return nil, err
 		}
-		code := db.GetCode(codeAddr)
+		code := db.GetCode(addr)
 		if len(code) == 0 {
 			return nil, fmt.Errorf("code not set for %s", name)
 		}
